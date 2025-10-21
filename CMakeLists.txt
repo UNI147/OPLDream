@@ -17,6 +17,7 @@ set(SOURCES
     src/OPL3Emulator.cpp
     src/OPL3Driver.cpp
     src/MidiFileParser.cpp
+    src/OPL3Presets.cpp
 )
 
 # Создание исполняемого файла

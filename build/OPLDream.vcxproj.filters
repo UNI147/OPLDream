@@ -13,6 +13,9 @@
     <ClCompile Include="C:\OPLDream\src\MidiFileParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\OPLDream\src\OPL3Presets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="C:\OPLDream\CMakeLists.txt" />

@@ -3,6 +3,8 @@ OPLDream/
 │   └── settings.json
 ├── src/
 │   ├── main.cpp
+│   ├── OPL3Presets.h
+│   ├── OPL3Presets.cpp
 │   ├── OPL3Emulator.h
 │   ├── OPL3Emulator.cpp
 │   ├── OPL3Driver.h

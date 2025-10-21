@@ -6,8 +6,16 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Добавляем таблицы скоростей огибающей
+static const int attackRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
+static const int decayRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
+static const int releaseRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
+
 OPL3Operator::OPL3Operator() {
     reset();
+    sampleRate = 44100.0; // Инициализируем sampleRate
+    modulator = nullptr;   // Инициализируем modulator
+    feedbackLevel = 0.0f;  // Инициализируем feedbackLevel
 }
 
 void OPL3Operator::reset() {
@@ -16,13 +24,26 @@ void OPL3Operator::reset() {
     keyOn = false;
     envStage = 3; // Release
     envLevel = 0;
+    
+    // Инициализация параметров по умолчанию
+    tremolo = 0;
+    vibrato = 0;
+    sustain = 0;
+    ksr = 0;
+    multi = 1;
+    ksl = 0;
+    outputLevel = 0;
+    attackRate = 0;
+    decayRate = 0;
+    sustainLevel = 0;
+    releaseRate = 0;
+    waveform = 0;
 }
 
 void OPL3Operator::setFrequency(uint16_t fnum, uint8_t block) {
-    // Правильный расчет частоты согласно документации OPL3
     // F-Number = Music Frequency * 2^(20-Block) / 49716 Hz
-    uint32_t baseFreq = fnum;
-    phaseStep = (baseFreq << block) * 8; // Упрощенный расчет
+    double freq = 49716.0 * fnum / (1 << (20 - block));
+    phaseStep = (uint32_t)(freq * (1 << 20) / sampleRate);
 }
 
 void OPL3Operator::setKeyOn(bool on) {
@@ -36,27 +57,27 @@ void OPL3Operator::setKeyOn(bool on) {
 }
 
 void OPL3Operator::updateEnvelope() {
-    // Простая огибающая для тестирования
+    // Реализация согласно регистрам Attack/Decay/Sustain/Release
     switch (envStage) {
         case 0: // Attack
-            envLevel += 2;
-            if (envLevel >= 127) {
-                envLevel = 127;
-                envStage = 1; // Decay
+            envLevel += attackRates[attackRate];
+            if (envLevel >= 0x3FF) { // 10-bit envelope
+                envLevel = 0x3FF;
+                envStage = 1;
             }
             break;
-        case 1: // Decay
-            envLevel -= 1;
-            if (envLevel <= 64) {
-                envLevel = 64;
-                envStage = 2; // Sustain
+        case 1: // Decay  
+            envLevel -= decayRates[decayRate];
+            if (envLevel <= sustainLevel << 6) {
+                envLevel = sustainLevel << 6;
+                envStage = 2;
             }
             break;
         case 2: // Sustain
-            // Остаемся на sustain уровне
+            // Держим уровень
             break;
         case 3: // Release
-            envLevel -= 1;
+            envLevel -= releaseRates[releaseRate];
             if (envLevel < 0) envLevel = 0;
             break;
     }
@@ -67,15 +88,30 @@ int16_t OPL3Operator::getSample() {
         return 0;
     }
     
-    // Простая синусоида для тестирования
-    double angle = (phase * 2.0 * M_PI) / (1 << 20);
-    int16_t sample = (int16_t)(sin(angle) * 30000 * envLevel / 127.0);
+    // Настоящий FM синтез
+    double phaseMod = 0.0;
+    if (modulator) {
+        phaseMod = modulator->getOutput() * feedbackLevel;
+    }
+    
+    double angle = ((phase + phaseMod) * 2.0 * M_PI) / (1 << 20);
+    int16_t sample = (int16_t)(sin(angle) * envLevel);
     
     phase += phaseStep;
     if (phase >= (1 << 20)) phase -= (1 << 20);
     
-    // Простая огибающая
     updateEnvelope();
+    return sample;
+}
+
+// Добавляем метод getOutput для использования в FM синтезе
+double OPL3Operator::getOutput() {
+    if (!keyOn && envStage == 3 && envLevel <= 0) {
+        return 0.0;
+    }
+    
+    double angle = (phase * 2.0 * M_PI) / (1 << 20);
+    double sample = sin(angle) * (envLevel / 1024.0);
     
     return sample;
 }
@@ -92,6 +128,11 @@ void OPL3Channel::reset() {
     synthType = 0;
     left = true;
     right = true;
+    
+    // Настраиваем операторы для FM синтеза
+    op1.modulator = nullptr;
+    op2.modulator = &op1;
+    op2.feedbackLevel = feedback / 7.0f;
 }
 
 void OPL3Channel::setFrequency(uint16_t fnum, uint8_t block) {

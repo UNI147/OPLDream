@@ -393,6 +393,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\OPLDream\src\OPL3Emulator.cpp" />
     <ClCompile Include="C:\OPLDream\src\OPL3Driver.cpp" />
     <ClCompile Include="C:\OPLDream\src\MidiFileParser.cpp" />
+    <ClCompile Include="C:\OPLDream\src\OPL3Presets.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="C:\OPLDream\build\ZERO_CHECK.vcxproj">

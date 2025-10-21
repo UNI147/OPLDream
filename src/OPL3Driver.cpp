@@ -1,5 +1,6 @@
 #include "OPL3Driver.h"
 #include <cstdio>
+#include <cstring>  // Добавляем для strcmp
 
 uint8_t getOperatorOffset(uint8_t channel, uint8_t operatorNum) {
     // Таблица смещений операторов для OPL3
@@ -27,6 +28,9 @@ OPL3Driver::OPL3Driver(OPL3Emulator& emu) : emulator(emu) {
         channelMap[i].oplChannel = i % 18; // Простое распределение
         channelMap[i].volume = 100;
         channelMap[i].pan = 64;
+        
+        // Инициализация пресетов по умолчанию
+        currentPresets[i] = *OPL3PresetLibrary::getPreset(0); // Piano по умолчанию
     }
 }
 
@@ -81,6 +85,7 @@ void OPL3Driver::controlChange(int midiChannel, uint8_t controller, uint8_t valu
 
 void OPL3Driver::programChange(int midiChannel, uint8_t program) {
     printf("Program Change: ch=%d, program=%d\n", midiChannel, program);
+    loadGMInstrument(midiChannel, program);
 }
 
 int OPL3Driver::allocateOPLChannel(int midiChannel) {
@@ -115,4 +120,29 @@ void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
     // Регистр Cx: Feedback/Synth Type
     uint8_t cvalue = static_cast<uint8_t>((patch.feedback << 1) | patch.synthType);
     emulator.writeRegister(baseReg + 0xC0 + ch, cvalue);
+}
+
+void OPL3Driver::loadGMInstrument(uint8_t midiChannel, uint8_t gmProgram) {
+    if (gmProgram < OPL3PresetLibrary::getPresetCount()) {
+        const OPL3Preset* preset = OPL3PresetLibrary::getPreset(gmProgram);
+        loadCustomInstrument(midiChannel, *preset);
+    }
+}
+
+void OPL3Driver::loadCustomInstrument(uint8_t midiChannel, const OPL3Preset& preset) {
+    currentPresets[midiChannel] = preset;
+    
+    // Конвертируем OPL3Preset в OPL3Patch
+    OPL3Patch patch;
+    memcpy(patch.trem_vib_sus_ksr_multi, preset.trem_vib_sus_ksr_multi, 2);
+    memcpy(patch.ksl_outputLevel, preset.ksl_outputLevel, 2);
+    memcpy(patch.attackDecay, preset.attackDecay, 2);
+    memcpy(patch.sustainRelease, preset.sustainRelease, 2);
+    memcpy(patch.waveform, preset.waveform, 2);
+    patch.feedback = preset.feedback;
+    patch.synthType = preset.synthType;
+    
+    loadPatch(midiChannel, patch);
+    
+    printf("Loaded preset '%s' on channel %d\n", preset.name, midiChannel);
 }

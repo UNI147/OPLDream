@@ -3,6 +3,7 @@
 
 #include "MidiEvent.h"
 #include "OPL3Emulator.h"
+#include "OPL3Presets.h"
 
 struct OPL3Patch {
     // Параметры для двух операторов
@@ -24,6 +25,9 @@ public:
     // Сделаем методы публичными для тестирования
     void noteOn(int midiChannel, uint8_t note, uint8_t velocity);
     void noteOff(int midiChannel, uint8_t note);
+    
+    void loadGMInstrument(uint8_t midiChannel, uint8_t gmProgram);
+    void loadCustomInstrument(uint8_t midiChannel, const OPL3Preset& preset);
 
 private:
     OPL3Emulator& emulator;
@@ -34,6 +38,8 @@ private:
         uint8_t volume;     // Канальная громкость (CC7)
         uint8_t pan;        // Панорама (CC10)
     } channelMap[16];       // 16 MIDI-каналов
+
+    OPL3Preset currentPresets[16];  // Массив пресетов
 
     int allocateOPLChannel(int midiChannel);
     void controlChange(int midiChannel, uint8_t controller, uint8_t value);
