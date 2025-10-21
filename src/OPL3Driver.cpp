@@ -1,6 +1,11 @@
 #include "OPL3Driver.h"
 #include <cstdio>
 #include <cstring>
+#include <iostream>
+#include <cmath>
+
+// Используем extern для доступа к OPL3_CLOCK из OPL3Emulator.cpp
+extern const double OPL3_CLOCK;
 
 uint8_t getOperatorOffset(uint8_t channel, uint8_t operatorNum) {
     static const uint8_t operatorOffsets[9][2] = {
@@ -47,14 +52,46 @@ void OPL3Driver::handleEvent(const MidiEvent& event) {
 }
 
 void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
-    (void)velocity;
-    
     int oplChannel = channelMap[midiChannel].oplChannel;
     
-    // Простая установка частоты
-    uint16_t fnum = 100 + note * 50;
-    uint8_t block = static_cast<uint8_t>(note / 12) & 0x07;    
+    printf("Note On: MIDI ch=%d -> OPL ch=%d, note=%d, velocity=%d\n", 
+           midiChannel, oplChannel, note, velocity);
+    
+    // Конвертируем MIDI ноту в частоту OPL3
+    double freq = 8.176 * pow(2.0, note / 12.0); // C0 = 8.176 Hz
+    
+    // Улучшенная конвертация в F-Number и Block
+    uint8_t block = 0;
+    uint16_t fnum = 0;
+    
+    // Ищем подходящий block (fnum должен быть < 1024)
+    for (block = 0; block < 8; block++) {
+        fnum = (uint16_t)(freq * (1 << (20 - block)) / (OPL3_CLOCK / 72.0));
+        if (fnum < 1024) break;
+    }
+    
+    // Ограничиваем максимальные значения
+    if (fnum >= 1024) {
+        fnum = 1023;
+        block = 7;
+    }
+    
+    printf("  Frequency: %.2f Hz -> fnum=%d, block=%d\n", freq, fnum, block);
+    
+    // Устанавливаем частоту и включаем ноту
     emulator.channels[oplChannel].setFrequency(fnum, block);
+    
+    // Устанавливаем громкость на основе velocity
+    uint8_t volume = 63 - (velocity / 2); // velocity 0-127 -> outputLevel 63-0
+    emulator.channels[oplChannel].op1.outputLevel = volume;
+    emulator.channels[oplChannel].op2.outputLevel = volume;
+    
+    // Устанавливаем быструю атаку и медленный релиз
+    emulator.channels[oplChannel].op1.attackRate = 15;
+    emulator.channels[oplChannel].op2.attackRate = 15;
+    emulator.channels[oplChannel].op1.releaseRate = 5;
+    emulator.channels[oplChannel].op2.releaseRate = 5;
+    
     emulator.channels[oplChannel].setKeyOn(true);
     
     channelMap[midiChannel].note = note;
@@ -83,17 +120,24 @@ int OPL3Driver::allocateOPLChannel(int midiChannel) {
 
 void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
     int oplChannel = allocateOPLChannel(midiChannel);
-    channelMap[midiChannel].patch = patch;
-    channelMap[midiChannel].oplChannel = oplChannel;
-
-    // Записываем параметры патча в регистры OPL3
+    printf("Loading patch on MIDI ch=%d -> OPL ch=%d\n", midiChannel, oplChannel);
+    
+    // Убедимся, что канал в 2-OP режиме
     uint8_t baseReg = (oplChannel < 9) ? 0x00 : 0x100;
     uint8_t ch = static_cast<uint8_t>(oplChannel % 9);
+    if (oplChannel < 6) {
+        // Для каналов 0-5 можно отключить 4-OP режим, но в эмуляции пока не реализовано
+    }
 
     // Регистры для оператора 1 и 2
     uint8_t op1_offset = getOperatorOffset(ch, 0);
     uint8_t op2_offset = getOperatorOffset(ch, 1);
 
+    std::cout << "Writing OPL3 registers for channel " << oplChannel 
+              << " (base=" << (int)baseReg << ", op1=" << (int)op1_offset 
+              << ", op2=" << (int)op2_offset << ")" << std::endl;
+
+    // Записываем параметры операторов
     emulator.writeRegister(baseReg + 0x20 + op1_offset, patch.trem_vib_sus_ksr_multi[0]);
     emulator.writeRegister(baseReg + 0x40 + op1_offset, patch.ksl_outputLevel[0]);
     emulator.writeRegister(baseReg + 0x60 + op1_offset, patch.attackDecay[0]);
@@ -106,9 +150,12 @@ void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
     emulator.writeRegister(baseReg + 0x80 + op2_offset, patch.sustainRelease[1]);
     emulator.writeRegister(baseReg + 0xE0 + op2_offset, patch.waveform[1]);
 
-    // Регистр Cx: Feedback/Synth Type
-    uint8_t cvalue = static_cast<uint8_t>((patch.feedback << 1) | patch.synthType);
+    // Регистр Cx: Feedback/Synth Type + стерео - исправляем предупреждения
+    uint8_t cvalue = static_cast<uint8_t>((patch.feedback << 1) | (patch.synthType & 1));
+    cvalue = static_cast<uint8_t>(cvalue | 0x30); // Включаем оба канала (левый и правый)
     emulator.writeRegister(baseReg + 0xC0 + ch, cvalue);
+    
+    std::cout << "Patch loaded successfully" << std::endl;
 }
 
 void OPL3Driver::loadGMInstrument(uint8_t midiChannel, uint8_t gmProgram) {

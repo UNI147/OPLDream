@@ -8,23 +8,39 @@
 #include <cstring>
 
 static int audioCallback(const void* input, void* output,
-                        unsigned long frameCount,
-                        const PaStreamCallbackTimeInfo* timeInfo,
-                        PaStreamCallbackFlags statusFlags,
-                        void* userData) {
+        unsigned long frameCount,
+        const PaStreamCallbackTimeInfo* timeInfo,
+        PaStreamCallbackFlags statusFlags,
+        void* userData) {
     (void)input;
     (void)timeInfo;
     (void)statusFlags;
-    
+
+    static int callCount = 0;
+    callCount++;
+
     OPL3Emulator* emulator = static_cast<OPL3Emulator*>(userData);
     int16_t* buffer = static_cast<int16_t*>(output);
-    
+
     // Очистка буфера
     memset(buffer, 0, frameCount * 2 * sizeof(int16_t));
-    
+
     // Рендеринг в буфер
     emulator->render(buffer, static_cast<int>(frameCount * 2));
-    
+
+    // Отладочный вывод каждые 100 вызовов
+    if (callCount % 100 == 0) {
+        // Проверяем, есть ли активные каналы
+        int activeChannels = 0;
+        for (int i = 0; i < 18; i++) {
+            if (emulator->channels[i].isActive()) {
+                activeChannels++;
+            }
+        }
+        std::cout << "Audio callback: " << callCount 
+                  << ", active channels: " << activeChannels << std::endl;
+    }
+
     return paContinue;
 }
 
@@ -33,17 +49,61 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: " << argv[0] << " <midi_file>" << std::endl;
         std::cout << "No MIDI file provided, running in test mode..." << std::endl;
         
-        // Тестовый режим без файла
+        // Тестовый режим с аудио выводом
         OPL3Emulator emulator;
+        emulator.setSampleRate(49716.0);
         OPL3Driver driver(emulator);
         
+        // Инициализация PortAudio для теста
+        PaError err = Pa_Initialize();
+        if (err != paNoError) {
+            std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
+            return 1;
+        }
+
+        PaStream* stream;
+        err = Pa_OpenDefaultStream(&stream, 
+                                    0,      // input channels
+                                    2,      // output channels (stereo)
+                                    paInt16, // sample format
+                                    49716,  // используем 49716 Гц (нативная частота OPL3)
+                                    256,    // frames per buffer
+                                    audioCallback, 
+                                    &emulator);
+        if (err != paNoError) {
+            std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
+            Pa_Terminate();
+            return 1;
+        }
+
+        err = Pa_StartStream(stream);
+        if (err != paNoError) {
+            std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
+            Pa_CloseStream(stream);
+            Pa_Terminate();
+            return 1;
+        }
+
         // Загружаем тестовый инструмент
-        driver.loadGMInstrument(0, 0); // Piano
+        driver.loadGMInstrument(0, 7); // Overdriven Guitar (более слышимый)
         
-        // Простая тестовая нота
-        driver.noteOn(0, 60, 100);
+        // Тестовые ноты
+        driver.noteOn(0, 48, 100); // C3
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        driver.noteOn(0, 52, 100); // E3
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        driver.noteOn(0, 55, 100); // G3
         std::this_thread::sleep_for(std::chrono::seconds(2));
-        driver.noteOff(0, 60);
+        
+        driver.noteOff(0, 48);
+        driver.noteOff(0, 52);
+        driver.noteOff(0, 55);
+        
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        Pa_StopStream(stream);
+        Pa_CloseStream(stream);
+        Pa_Terminate();
         
         std::cout << "Test completed." << std::endl;
         return 0;
@@ -55,7 +115,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // ПЕРЕМЕСТИТЕ ЭТИ СТРОКИ ВПЕРЁД - исправление ошибки с emulator
     OPL3Emulator emulator;
+    emulator.setSampleRate(49716.0); // Устанавливаем стандартную частоту
     OPL3Driver driver(emulator);
 
     // Инициализация PortAudio
@@ -66,14 +128,16 @@ int main(int argc, char* argv[]) {
     }
 
     PaStream* stream;
+
+    // В Pa_OpenDefaultStream используйте:
     err = Pa_OpenDefaultStream(&stream, 
-                               0,      // input channels
-                               2,      // output channels (stereo)
-                               paInt16, // sample format
-                               44100,  // sample rate
-                               256,    // frames per buffer
-                               audioCallback, 
-                               &emulator);
+                                0,      // input channels
+                                2,      // output channels (stereo)
+                                paInt16, // sample format
+                                49716,  // используем нативную частоту OPL3
+                                256,    // frames per buffer
+                                audioCallback, 
+                                &emulator);
     if (err != paNoError) {
         std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
         Pa_Terminate();

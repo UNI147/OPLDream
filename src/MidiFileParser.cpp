@@ -18,8 +18,6 @@ bool MidiFileParser::load(const char* filename) {
         return false;
     }
     
-    uint32_t length = (uint8_t(header[4]) << 24) | (uint8_t(header[5]) << 16) | 
-                     (uint8_t(header[6]) << 8) | uint8_t(header[7]);
     uint16_t format = (uint8_t(header[8]) << 8) | uint8_t(header[9]);
     uint16_t tracks = (uint8_t(header[10]) << 8) | uint8_t(header[11]);
     uint16_t division = (uint8_t(header[12]) << 8) | uint8_t(header[13]);
@@ -60,9 +58,9 @@ bool MidiFileParser::parseTrack(std::ifstream& file, uint16_t division) {
     
     std::cout << "Track length: " << trackLength << " bytes" << std::endl;
     
-    // Упрощенная временная модель: 120 BPM = 500000 микросекунд на четверть ноты
-    double microsecondsPerQuarterNote = 500000.0;
-    double ticksPerMicrosecond = division / microsecondsPerQuarterNote;
+    // Фиксированный темп 120 BPM
+    double microsecondsPerQuarterNote = 500000.0; // 120 BPM
+    double ticksPerSecond = division * (1000000.0 / microsecondsPerQuarterNote);
     
     double currentTime = 0.0;
     uint8_t lastStatus = 0;
@@ -73,7 +71,7 @@ bool MidiFileParser::parseTrack(std::ifstream& file, uint16_t division) {
         if (file.eof()) break;
         
         // Конвертируем в секунды
-        currentTime += deltaTime / (division * ticksPerMicrosecond * 1000.0);
+        currentTime += deltaTime / ticksPerSecond;
         
         uint8_t statusByte;
         file.read(reinterpret_cast<char*>(&statusByte), 1);
