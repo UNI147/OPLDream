@@ -57,16 +57,16 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     printf("Note On: MIDI ch=%d -> OPL ch=%d, note=%d, velocity=%d\n", 
            midiChannel, oplChannel, note, velocity);
     
-    // Конвертируем MIDI ноту в частоту OPL3
-    double freq = 8.176 * pow(2.0, note / 12.0); // C0 = 8.176 Hz
+    // Правильный расчет частоты согласно документации OPL3
+    double freq = 8.176 * pow(2.0, (note - 12) / 12.0); // C1 = 32.7 Hz
     
-    // Улучшенная конвертация в F-Number и Block
     uint8_t block = 0;
     uint16_t fnum = 0;
     
     // Ищем подходящий block (fnum должен быть < 1024)
     for (block = 0; block < 8; block++) {
-        fnum = (uint16_t)(freq * (1 << (20 - block)) / (OPL3_CLOCK / 72.0));
+        double divisor = OPL3_CLOCK / 72.0;
+        fnum = static_cast<uint16_t>((freq * (1 << (20 - block))) / divisor);
         if (fnum < 1024) break;
     }
     
@@ -81,16 +81,24 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     // Устанавливаем частоту и включаем ноту
     emulator.channels[oplChannel].setFrequency(fnum, block);
     
-    // Устанавливаем громкость на основе velocity
-    uint8_t volume = 63 - (velocity / 2); // velocity 0-127 -> outputLevel 63-0
+    // МАКСИМАЛЬНАЯ ГРОМКОСТЬ - минимальный outputLevel
+    uint8_t volume = 0; // 0 = максимальная громкость (вместо 63)
     emulator.channels[oplChannel].op1.outputLevel = volume;
     emulator.channels[oplChannel].op2.outputLevel = volume;
     
-    // Устанавливаем быструю атаку и медленный релиз
-    emulator.channels[oplChannel].op1.attackRate = 15;
-    emulator.channels[oplChannel].op2.attackRate = 15;
-    emulator.channels[oplChannel].op1.releaseRate = 5;
-    emulator.channels[oplChannel].op2.releaseRate = 5;
+    // ОЧЕНЬ МЕДЛЕННАЯ ОГИБАЮЩАЯ для максимальной длительности
+    emulator.channels[oplChannel].op1.attackRate = 4;   // Очень медленная атака
+    emulator.channels[oplChannel].op2.attackRate = 4;
+    emulator.channels[oplChannel].op1.decayRate = 1;    // Минимальная скорость спада
+    emulator.channels[oplChannel].op2.decayRate = 1;
+    emulator.channels[oplChannel].op1.sustainLevel = 15; // Максимальный сустейн
+    emulator.channels[oplChannel].op2.sustainLevel = 15;
+    emulator.channels[oplChannel].op1.releaseRate = 0;   // Самый медленный релиз
+    emulator.channels[oplChannel].op2.releaseRate = 0;
+    
+    // Максимальная обратная связь для самого богатого звука
+    emulator.channels[oplChannel].feedback = 7;
+    emulator.channels[oplChannel].op1.feedbackLevel = 1.0f; // Полная обратная связь
     
     emulator.channels[oplChannel].setKeyOn(true);
     

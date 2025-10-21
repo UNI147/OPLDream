@@ -2,9 +2,33 @@
 #define OPL3EMULATOR_H
 
 #include <cstdint>
+#include <cmath>
 
 // Объявляем OPL3_CLOCK как extern
 extern const double OPL3_CLOCK;
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+class LFO {
+private:
+    double phase;
+    double phaseStep;
+    double sampleRate;
+    
+public:
+    LFO(double rate, double sr) : phase(0), sampleRate(sr) {
+        phaseStep = 2.0 * M_PI * rate / sampleRate;
+    }
+    
+    double getValue() {
+        double value = std::sin(phase);
+        phase += phaseStep;
+        if(phase >= 2.0 * M_PI) phase -= 2.0 * M_PI;
+        return value;
+    }
+};
 
 class OPL3Operator {
 public:
@@ -15,6 +39,8 @@ public:
     void updateEnvelope();
     int16_t getSample();
     double getOutput();
+    double getWaveformOutput(double phase);
+    int getCurrentRate();
 
     // Регистры
     uint8_t tremolo, vibrato, sustain, ksr, multi;
@@ -44,6 +70,7 @@ private:
     int envStage; // 0:Attack, 1:Decay, 2:Sustain, 3:Release
     int envLevel; // Текущий уровень огибающей (0-1023)
     int targetLevel; // Целевой уровень для текущей стадии
+    LFO lfo = LFO{6.0, 49716.0}; // LFO для тремоло/вибрато (~6 Гц)
 };
 
 class OPL3Channel {
@@ -89,7 +116,11 @@ public:
 
 private:
     double sampleRate;
+    bool rhythmMode = false;
+    
     OPL3Operator& getOperator(int index);
+    void enable4OPMode(int channelPair);
+    void updatePercussion(uint8_t percussionBits);
 };
 
 #endif
