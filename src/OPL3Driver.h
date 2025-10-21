@@ -20,6 +20,10 @@ public:
     OPL3Driver(OPL3Emulator& emu);
     void handleEvent(const MidiEvent& event);
     void loadPatch(uint8_t midiChannel, const OPL3Patch& patch);
+    
+    // Сделаем методы публичными для тестирования
+    void noteOn(int midiChannel, uint8_t note, uint8_t velocity);
+    void noteOff(int midiChannel, uint8_t note);
 
 private:
     OPL3Emulator& emulator;
@@ -32,8 +36,6 @@ private:
     } channelMap[16];       // 16 MIDI-каналов
 
     int allocateOPLChannel(int midiChannel);
-    void noteOn(int midiChannel, uint8_t note, uint8_t velocity);
-    void noteOff(int midiChannel, uint8_t note);
     void controlChange(int midiChannel, uint8_t controller, uint8_t value);
     void programChange(int midiChannel, uint8_t program);
 };

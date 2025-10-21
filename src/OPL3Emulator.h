@@ -43,15 +43,17 @@ public:
 };
 
 class OPL3Emulator {
-public:
-    OPL3Emulator();
-    void reset();
-    void writeRegister(uint16_t reg, uint8_t value);
-    void render(int16_t* buffer, int samples);
-
-private:
-    OPL3Channel channels[18]; // 18 melodic channels
-    // ... Регистры верхнего уровня (04, 08, BD и т.д.)
-    double sampleRate;
-};
+    public:
+        OPL3Emulator();
+        void reset();
+        void writeRegister(uint16_t reg, uint8_t value);
+        void render(int16_t* buffer, int samples);
+    
+        // Добавьте это для доступа из OPL3Driver
+        OPL3Channel channels[18]; // 18 melodic channels
+    
+    private:
+        // ... Регистры верхнего уровня (04, 08, BD и т.д.)
+        double sampleRate;
+    };
 #endif

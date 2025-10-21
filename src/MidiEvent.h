@@ -23,13 +23,4 @@ struct MidiEvent {
         : time(t), type(ty), channel(ch), data1(d1), data2(d2) {}
 };
 
-class MidiFileParser {
-public:
-    bool load(const char* filename);
-    const std::vector<MidiEvent>& getEvents() const { return events; }
-
-private:
-    std::vector<MidiEvent> events;
-    // ... (Внутренние методы для чтения MIDI-файла)
-};
 #endif

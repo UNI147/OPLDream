@@ -1,0 +1,16 @@
+OPLDream/
+├── .vscode/
+│   └── settings.json
+├── src/
+│   ├── main.cpp
+│   ├── OPL3Emulator.h
+│   ├── OPL3Emulator.cpp
+│   ├── OPL3Driver.h
+│   ├── OPL3Driver.cpp
+│   ├── MidiEvent.h
+│   ├── MidiFileParser.h
+│   └── MidiFileParser.cpp
+├── include/
+├── lib/
+├── CMakeLists.txt
+└── build/
