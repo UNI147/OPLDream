@@ -11,7 +11,7 @@ public:
     void setKeyOn(bool on);
     void updateEnvelope();
     int16_t getSample();
-    double getOutput(); // Добавляем метод для FM синтеза
+    double getOutput();
 
     // Регистры
     uint8_t tremolo, vibrato, sustain, ksr, multi;
@@ -24,6 +24,9 @@ public:
     double sampleRate;
     class OPL3Operator* modulator;
     float feedbackLevel;
+
+    // Добавляем поля для частоты
+    uint16_t fnum;
 
 private:
     uint32_t phase;     // Фазовый аккумулятор
@@ -45,6 +48,9 @@ public:
     uint8_t feedback;
     uint8_t synthType;
     bool left, right;
+    
+    // Добавляем поле для частоты
+    uint16_t fnum;
 };
 
 class OPL3Emulator {
@@ -59,5 +65,7 @@ public:
 
 private:
     double sampleRate;
+    OPL3Operator& getOperator(int index);
 };
+
 #endif

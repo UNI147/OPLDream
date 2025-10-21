@@ -6,16 +6,16 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Добавляем таблицы скоростей огибающей
+// Таблицы скоростей огибающей
 static const int attackRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
 static const int decayRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
 static const int releaseRates[16] = {1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
 
 OPL3Operator::OPL3Operator() {
     reset();
-    sampleRate = 44100.0; // Инициализируем sampleRate
-    modulator = nullptr;   // Инициализируем modulator
-    feedbackLevel = 0.0f;  // Инициализируем feedbackLevel
+    sampleRate = 44100.0;
+    modulator = nullptr;
+    feedbackLevel = 0.0f;
 }
 
 void OPL3Operator::reset() {
@@ -40,10 +40,11 @@ void OPL3Operator::reset() {
     waveform = 0;
 }
 
-void OPL3Operator::setFrequency(uint16_t fnum, uint8_t block) {
+void OPL3Operator::setFrequency(uint16_t frequencyNum, uint8_t blockNum) {
     // F-Number = Music Frequency * 2^(20-Block) / 49716 Hz
-    double freq = 49716.0 * fnum / (1 << (20 - block));
+    double freq = 49716.0 * frequencyNum / (1 << (20 - blockNum));
     phaseStep = (uint32_t)(freq * (1 << 20) / sampleRate);
+    fnum = frequencyNum; // сохраняем в член класса
 }
 
 void OPL3Operator::setKeyOn(bool on) {
@@ -57,11 +58,10 @@ void OPL3Operator::setKeyOn(bool on) {
 }
 
 void OPL3Operator::updateEnvelope() {
-    // Реализация согласно регистрам Attack/Decay/Sustain/Release
     switch (envStage) {
         case 0: // Attack
             envLevel += attackRates[attackRate];
-            if (envLevel >= 0x3FF) { // 10-bit envelope
+            if (envLevel >= 0x3FF) {
                 envLevel = 0x3FF;
                 envStage = 1;
             }
@@ -104,7 +104,6 @@ int16_t OPL3Operator::getSample() {
     return sample;
 }
 
-// Добавляем метод getOutput для использования в FM синтезе
 double OPL3Operator::getOutput() {
     if (!keyOn && envStage == 3 && envLevel <= 0) {
         return 0.0;
@@ -135,9 +134,10 @@ void OPL3Channel::reset() {
     op2.feedbackLevel = feedback / 7.0f;
 }
 
-void OPL3Channel::setFrequency(uint16_t fnum, uint8_t block) {
-    op1.setFrequency(fnum, block);
-    op2.setFrequency(fnum, block);
+void OPL3Channel::setFrequency(uint16_t frequencyNum, uint8_t blockNum) {
+    op1.setFrequency(frequencyNum, blockNum);
+    op2.setFrequency(frequencyNum, blockNum);
+    fnum = frequencyNum; // сохраняем в член класса
 }
 
 void OPL3Channel::setKeyOn(bool on) {
@@ -165,15 +165,87 @@ OPL3Emulator::OPL3Emulator() : sampleRate(44100.0) {
 }
 
 void OPL3Emulator::reset() {
-    for (auto& channel : channels) {
-        channel.reset();
+    for (int i = 0; i < 18; i++) {
+        channels[i].reset();
     }
 }
 
+// Вспомогательная функция для получения оператора
+OPL3Operator& OPL3Emulator::getOperator(int index) {
+    // Простая маппинг - каждый канал имеет 2 оператора
+    int channel = index / 2;
+    int opInChannel = index % 2;
+    
+    return opInChannel == 0 ? channels[channel].op1 : channels[channel].op2;
+}
+
 void OPL3Emulator::writeRegister(uint16_t reg, uint8_t value) {
-    // Базовая обработка регистров
-    // Пока просто логируем
     printf("Write reg: 0x%03X = 0x%02X\n", reg, value);
+    
+    // Обработка основных регистров
+    if (reg >= 0x20 && reg <= 0x35) {
+        // Tremolo/Vibrato/Sustain/KSR/Multiplication
+        int opIndex = (reg - 0x20) % 32;
+        if (opIndex < 18) {
+            OPL3Operator& op = getOperator(opIndex);
+            op.tremolo = (value >> 7) & 1;
+            op.vibrato = (value >> 6) & 1;
+            op.sustain = (value >> 5) & 1;
+            op.ksr = (value >> 4) & 1;
+            op.multi = value & 0x0F;
+        }
+    }
+    else if (reg >= 0x40 && reg <= 0x55) {
+        // KSL/Output Level
+        int opIndex = (reg - 0x40) % 32;
+        if (opIndex < 18) {
+            OPL3Operator& op = getOperator(opIndex);
+            op.ksl = (value >> 6) & 3;
+            op.outputLevel = value & 0x3F;
+        }
+    }
+    else if (reg >= 0x60 && reg <= 0x75) {
+        // Attack/Decay
+        int opIndex = (reg - 0x60) % 32;
+        if (opIndex < 18) {
+            OPL3Operator& op = getOperator(opIndex);
+            op.attackRate = (value >> 4) & 0x0F;
+            op.decayRate = value & 0x0F;
+        }
+    }
+    else if (reg >= 0x80 && reg <= 0x95) {
+        // Sustain/Release
+        int opIndex = (reg - 0x80) % 32;
+        if (opIndex < 18) {
+            OPL3Operator& op = getOperator(opIndex);
+            op.sustainLevel = (value >> 4) & 0x0F;
+            op.releaseRate = value & 0x0F;
+        }
+    }
+    else if (reg >= 0xA0 && reg <= 0xA8) {
+        // Frequency (low)
+        int ch = reg - 0xA0;
+        if (ch < 9) {
+            // Сохраняем fnum для использования в B0-B8
+            channels[ch].fnum = (channels[ch].fnum & 0x300) | value;
+        }
+    }
+    else if (reg >= 0xB0 && reg <= 0xB8) {
+        // Key On/Block/Frequency (high)
+        int ch = reg - 0xB0;
+        if (ch < 9) {
+            bool keyOn = (value >> 5) & 1;
+            uint8_t block = (value >> 2) & 7;
+            channels[ch].fnum = (channels[ch].fnum & 0xFF) | ((value & 3) << 8);
+            
+            channels[ch].setKeyOn(keyOn);
+            channels[ch].setFrequency(channels[ch].fnum, block);
+        }
+    }
+    else if (reg == 0xBD) {
+        // Rhythm/percussion
+        // TODO: Implement percussion
+    }
 }
 
 void OPL3Emulator::render(int16_t* buffer, int samples) {
@@ -181,9 +253,9 @@ void OPL3Emulator::render(int16_t* buffer, int samples) {
         int16_t sample = 0;
         
         // Микшируем все активные каналы
-        for (auto& channel : channels) {
-            if (channel.left || channel.right) {
-                sample += channel.getSample();
+        for (int j = 0; j < 18; j++) {
+            if (channels[j].left || channels[j].right) {
+                sample += channels[j].getSample();
             }
         }
         

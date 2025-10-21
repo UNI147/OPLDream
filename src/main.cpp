@@ -12,7 +12,7 @@ static int audioCallback(const void* input, void* output,
                         const PaStreamCallbackTimeInfo* timeInfo,
                         PaStreamCallbackFlags statusFlags,
                         void* userData) {
-    (void)input;        // Помечаем неиспользуемые параметры
+    (void)input;
     (void)timeInfo;
     (void)statusFlags;
     
@@ -23,7 +23,7 @@ static int audioCallback(const void* input, void* output,
     memset(buffer, 0, frameCount * 2 * sizeof(int16_t));
     
     // Рендеринг в буфер
-    emulator->render(buffer, frameCount * 2);
+    emulator->render(buffer, static_cast<int>(frameCount * 2));
     
     return paContinue;
 }
@@ -36,6 +36,9 @@ int main(int argc, char* argv[]) {
         // Тестовый режим без файла
         OPL3Emulator emulator;
         OPL3Driver driver(emulator);
+        
+        // Загружаем тестовый инструмент
+        driver.loadGMInstrument(0, 0); // Piano
         
         // Простая тестовая нота
         driver.noteOn(0, 60, 100);
@@ -88,9 +91,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Playing MIDI file: " << argv[1] << std::endl;
 
     // Главный цикл воспроизведения
-    auto events = parser.getEvents(); // Копируем события
+    auto events = parser.getEvents();
     auto nextEvent = events.begin();
-    auto startTime = std::chrono::steady_clock::now(); // Используем steady_clock вместо Pa_GetTime
+    auto startTime = std::chrono::steady_clock::now();
 
     while (nextEvent != events.end()) {
         auto currentTime = std::chrono::steady_clock::now();

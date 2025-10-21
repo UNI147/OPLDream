@@ -1,19 +1,12 @@
 #include "OPL3Driver.h"
 #include <cstdio>
-#include <cstring>  // Добавляем для strcmp
+#include <cstring>
 
 uint8_t getOperatorOffset(uint8_t channel, uint8_t operatorNum) {
-    // Таблица смещений операторов для OPL3
     static const uint8_t operatorOffsets[9][2] = {
-        {0x00, 0x03}, // Channel 0: Op1=0x00, Op2=0x03
-        {0x01, 0x04}, // Channel 1: Op1=0x01, Op2=0x04
-        {0x02, 0x05}, // Channel 2: Op1=0x02, Op2=0x05
-        {0x08, 0x0B}, // Channel 3: Op1=0x08, Op2=0x0B
-        {0x09, 0x0C}, // Channel 4: Op1=0x09, Op2=0x0C
-        {0x0A, 0x0D}, // Channel 5: Op1=0x0A, Op2=0x0D
-        {0x10, 0x13}, // Channel 6: Op1=0x10, Op2=0x13
-        {0x11, 0x14}, // Channel 7: Op1=0x11, Op2=0x14
-        {0x12, 0x15}  // Channel 8: Op1=0x12, Op2=0x15
+        {0x00, 0x03}, {0x01, 0x04}, {0x02, 0x05},
+        {0x08, 0x0B}, {0x09, 0x0C}, {0x0A, 0x0D},
+        {0x10, 0x13}, {0x11, 0x14}, {0x12, 0x15}
     };
     
     if (channel < 9 && operatorNum < 2) {
@@ -23,14 +16,11 @@ uint8_t getOperatorOffset(uint8_t channel, uint8_t operatorNum) {
 }
 
 OPL3Driver::OPL3Driver(OPL3Emulator& emu) : emulator(emu) {
-    // Инициализация каналов
     for (int i = 0; i < 16; i++) {
-        channelMap[i].oplChannel = i % 18; // Простое распределение
+        channelMap[i].oplChannel = i % 18;
         channelMap[i].volume = 100;
         channelMap[i].pan = 64;
-        
-        // Инициализация пресетов по умолчанию
-        currentPresets[i] = *OPL3PresetLibrary::getPreset(0); // Piano по умолчанию
+        currentPresets[i] = *OPL3PresetLibrary::getPreset(0);
     }
 }
 
@@ -57,14 +47,13 @@ void OPL3Driver::handleEvent(const MidiEvent& event) {
 }
 
 void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
-    (void)velocity; // Помечаем неиспользуемый параметр
+    (void)velocity;
     
     int oplChannel = channelMap[midiChannel].oplChannel;
     
     // Простая установка частоты
-    uint16_t fnum = 100 + note * 50; // Упрощенный расчет
-    uint8_t block = static_cast<uint8_t>(note / 12);
-    
+    uint16_t fnum = 100 + note * 50;
+    uint8_t block = static_cast<uint8_t>(note / 12) & 0x07;    
     emulator.channels[oplChannel].setFrequency(fnum, block);
     emulator.channels[oplChannel].setKeyOn(true);
     
@@ -72,7 +61,7 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
 }
 
 void OPL3Driver::noteOff(int midiChannel, uint8_t note) {
-    (void)note; // Помечаем неиспользуемый параметр
+    (void)note;
     
     int oplChannel = channelMap[midiChannel].oplChannel;
     emulator.channels[oplChannel].setKeyOn(false);
@@ -85,11 +74,11 @@ void OPL3Driver::controlChange(int midiChannel, uint8_t controller, uint8_t valu
 
 void OPL3Driver::programChange(int midiChannel, uint8_t program) {
     printf("Program Change: ch=%d, program=%d\n", midiChannel, program);
-    loadGMInstrument(midiChannel, program);
+    loadGMInstrument(static_cast<uint8_t>(midiChannel), program);
 }
 
 int OPL3Driver::allocateOPLChannel(int midiChannel) {
-    return midiChannel % 18; // Простое распределение
+    return midiChannel % 18;
 }
 
 void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
