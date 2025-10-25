@@ -6,10 +6,16 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Улучшенные скорости огибающей - более быстрые значения
-static const int attackRates[16] = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60};
-static const int decayRates[16] = {0, 1, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26};
-static const int releaseRates[16] = {0, 1, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26};
+// Улучшенные скорости огибающей - более реалистичные значения
+static const double attackRates[16] = {
+    0, 0.003, 0.006, 0.012, 0.024, 0.048, 0.072, 0.114,
+    0.168, 0.240, 0.300, 0.378, 0.462, 0.558, 0.672, 0.798
+};
+
+static const double decayReleaseRates[16] = {
+    0, 0.002, 0.004, 0.008, 0.016, 0.032, 0.048, 0.080,
+    0.126, 0.192, 0.282, 0.392, 0.522, 0.672, 0.882, 1.140
+};
 
 OPL3Operator::OPL3Operator() {
     reset();
@@ -47,21 +53,29 @@ void OPL3Operator::setFrequency(uint16_t frequencyNum, uint8_t blockNum) {
     fnum = frequencyNum;
     block = blockNum;
     
-    // Правильный расчет частоты для OPL3
-    double baseFreq = (OPL3_CLOCK * frequencyNum) / (1 << 19);
+    // ПРАВИЛЬНЫЙ расчет согласно документации OPL3 (стр. 10)
+    // F-Number = f * 2^(20-block) / 49716
+    // => f = (F-Number * 49716) / 2^(20-block)
     
-    // Применяем множитель частоты
+    double baseFreq = (frequencyNum * OPL3_CLOCK) / (1 << (20 - blockNum));
+    
+    // Применяем множитель частоты согласно таблице из документации (стр. 8-9)
     double mult_factor;
-    if (multi == 0) mult_factor = 0.5;
-    else mult_factor = multi;
+    static const double multi_table[16] = {
+        0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 12, 15, 15
+    };
+    mult_factor = multi_table[multi & 0x0F];
     
     double actualFreq = baseFreq * mult_factor;
     
-    // Применяем блок (октаву)
-    actualFreq *= (1 << blockNum);
+    // Рассчитываем шаг фазы для генератора с 20-битной фазой (1<<20 = 1048576)
+    phaseStep = static_cast<uint32_t>((actualFreq * 1048576.0) / sampleRate);
     
-    // Рассчитываем шаг фазы
-    phaseStep = static_cast<uint32_t>(actualFreq * (1 << 20) / sampleRate);
+    // Отладочный вывод для проверки
+    if (frequencyNum > 0 && blockNum > 0 && actualFreq > 100) {
+        printf("Freq: fnum=%d, block=%d, multi=%d -> base=%.1fHz, actual=%.1fHz, step=%u\n", 
+               frequencyNum, blockNum, multi, baseFreq, actualFreq, phaseStep);
+    }
 }
 
 void OPL3Operator::setKeyOn(bool on) {
@@ -80,29 +94,29 @@ void OPL3Operator::setKeyOn(bool on) {
 }
 
 void OPL3Operator::updateEnvelope() {
-    int rate = 0;
+    double rate = 0.0;
     
     switch (envStage) {
-        case 0: // Attack
+        case 0: // Attack (экспоненциальный рост)
             rate = attackRates[attackRate];
             if (rate > 0) {
-                envLevel += rate;
-                if (envLevel >= targetLevel) {
-                    envLevel = targetLevel;
+                envLevel = static_cast<int>(envLevel + (1024.0 - envLevel) * rate);
+                if (envLevel >= 1000) { // Практически достигли максимума
+                    envLevel = 1023;
                     envStage = 1; // Decay
-                    targetLevel = sustainLevel * 64; // sustainLevel 0-15 -> 0-960
+                    targetLevel = static_cast<int>(sustainLevel * 68.2); // 0-15 -> 0-1023
                 }
             } else {
-                envLevel = targetLevel;
+                envLevel = 1023;
                 envStage = 1;
             }
             break;
             
-        case 1: // Decay  
-            rate = decayRates[decayRate];
+        case 1: // Decay (экспоненциальный спад)
+            rate = decayReleaseRates[decayRate];
             if (rate > 0) {
-                envLevel -= rate;
-                if (envLevel <= targetLevel) {
+                envLevel = static_cast<int>(envLevel - (envLevel - targetLevel) * rate);
+                if (envLevel <= targetLevel + 1) {
                     envLevel = targetLevel;
                     envStage = 2; // Sustain
                 }
@@ -115,11 +129,11 @@ void OPL3Operator::updateEnvelope() {
         case 2: // Sustain - ничего не делаем, ждем KEY_OFF
             break;
             
-        case 3: // Release
-            rate = releaseRates[releaseRate];
+        case 3: // Release (экспоненциальный спад)
+            rate = decayReleaseRates[releaseRate];
             if (rate > 0) {
-                envLevel -= rate;
-                if (envLevel < 0) envLevel = 0;
+                envLevel = static_cast<int>(envLevel - envLevel * rate); // Экспоненциальный спад к 0
+                if (envLevel < 1) envLevel = 0;
             } else {
                 envLevel = 0;
             }
@@ -128,33 +142,27 @@ void OPL3Operator::updateEnvelope() {
 }
 
 double OPL3Operator::getOutput() {
-    // Если не нажата клавиша или огибающая на минимуме - выход 0
     if (!keyOn && envLevel <= 0) {
         return 0.0;
     }
     
-    // Обновляем огибающую каждый семпл
     updateEnvelope();
     
-    // Если огибающая на минимуме после обновления
     if (envLevel <= 0) {
         return 0.0;
     }
     
-    // Генерируем волну (синус)
+    // Генерируем волну
     double normalizedPhase = std::fmod(static_cast<double>(phase), 1048576.0) / 1048576.0;
     double sample = sin(normalizedPhase * 2.0 * M_PI);
     
-    // Применяем огибающую (инвертированную: 0=макс, 1023=мин)
-    double amplitude = (1023 - envLevel) / 1023.0;
+    // Экспоненциальная амплитудная модуляция (ближе к реальному OPL3)
+    double amplitude = std::exp((1023.0 - envLevel) / 256.0) / 20.0;
     
-    // Применяем уровень вывода (0=макс, 63=мин)
-    amplitude *= (63 - outputLevel) / 63.0;
+    // Применяем уровень вывода
+    amplitude *= (64.0 - outputLevel) / 64.0;
     
-    // Увеличиваем общую громкость
-    amplitude *= 4.0; // Увеличиваем амплитуду в 4 раза
-    
-    // Обновляем фазу для следующего семпла
+    // Обновляем фазу
     phase += phaseStep;
     if (phase >= 1048576) {
         phase -= 1048576;
@@ -165,5 +173,5 @@ double OPL3Operator::getOutput() {
 
 int16_t OPL3Operator::getSample() {
     double output = getOutput();
-    return static_cast<int16_t>(output * 16384.0); // Увеличиваем громкость
+    return static_cast<int16_t>(output * 8192.0);
 }

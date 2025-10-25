@@ -2,8 +2,6 @@
 #include <cstring>
 #include <iostream>
 
-const double OPL3_CLOCK = 14318180.0 / 288.0; // ~49716 Hz
-
 OPL3Emulator::OPL3Emulator() : sampleRate(OPL3_CLOCK) {
     reset();
 }

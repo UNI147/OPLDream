@@ -1,6 +1,10 @@
 #include "OPL3Channel.h"
 #include <cmath>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 OPL3Channel::OPL3Channel() {
     reset();
 }
@@ -43,30 +47,28 @@ int16_t OPL3Channel::getSample() {
         return 0;
     }
     
-    // Для FM синтеза: modulator -> carrier
-    // Получаем выход модулятора
+    // Правильная FM модуляция: выход модулятора влияет на частоту несущей
     double modulatorOutput = op1.getOutput();
     
-    // Временно применяем модуляцию к фазе carrier
-    double modAmount = modulatorOutput * 1024.0; // Увеличиваем глубину модуляции
-    double modulatedPhase = static_cast<double>(op2.phase) + modAmount;
+    // Модулируем фазу carrier (частотная модуляция)
+    double modDepth = modulatorOutput * 8.0 * (feedback + 1);
+    double phaseMod = modDepth * sin(2.0 * M_PI * op1.phase / 1048576.0);
     
-    // Сохраняем оригинальную фазу
+    // Временно применяем модуляцию
     uint32_t originalPhase = op2.phase;
+    op2.phase = static_cast<uint32_t>(std::fmod(op2.phase + phaseMod * 65536.0, 1048576.0));
     
-    // Временно устанавливаем модулированную фазу
-    op2.phase = static_cast<uint32_t>(std::fmod(modulatedPhase, 1048576.0));
-    
-    // Получаем выход carrier с модуляцией
     double carrierOutput = op2.getOutput();
     
-    // Восстанавливаем фазу carrier
+    // Восстанавливаем фазу
     op2.phase = originalPhase;
     
-    // Конвертируем в 16-бит с большей амплитудой
-    int32_t result = static_cast<int32_t>(carrierOutput * 16384.0);
+    // Обновляем фазы операторов
+    op1.phase = static_cast<uint32_t>(std::fmod(op1.phase + op1.phaseStep, 1048576.0));
+    op2.phase = static_cast<uint32_t>(std::fmod(op2.phase + op2.phaseStep, 1048576.0));
     
-    // Ограничение
+    int32_t result = static_cast<int32_t>(carrierOutput * 8192.0);
+    
     if (result > 32767) result = 32767;
     if (result < -32768) result = -32768;
     

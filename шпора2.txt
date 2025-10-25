@@ -1,0 +1,9 @@
+cd C:\OPLDream
+git pull
+git status
+# Если всё работает правильно:
+git add .
+git commit -m "кратко что сделал"
+git push
+git status
+# Должно быть: "nothing to commit, working tree clean"

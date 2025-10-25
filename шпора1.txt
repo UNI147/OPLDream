@@ -1,0 +1,5 @@
+cd C:\OPLDream\build\Debug
+OPLDream.exe de1m1.mid
+
+cd C:\OPLDream\build\Debug
+OPLDream.exe DUNE2-04.MID

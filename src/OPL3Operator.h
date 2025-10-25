@@ -3,7 +3,9 @@
 
 #include <cstdint>
 
-extern const double OPL3_CLOCK;
+#ifndef OPL3_CLOCK
+#define OPL3_CLOCK 49716.0
+#endif
 
 class OPL3Operator {
 public:

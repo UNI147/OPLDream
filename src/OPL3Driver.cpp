@@ -4,9 +4,6 @@
 #include <iostream>
 #include <cmath>
 
-// Используем extern для доступа к OPL3_CLOCK из OPL3Emulator.cpp
-extern const double OPL3_CLOCK;
-
 uint8_t getOperatorOffset(uint8_t channel, uint8_t operatorNum) {
     static const uint8_t operatorOffsets[9][2] = {
         {0x00, 0x03}, {0x01, 0x04}, {0x02, 0x05},
@@ -66,7 +63,8 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     
     // Ищем подходящий block (fnum должен быть < 1024)
     for (block = 0; block < 8; block++) {
-        fnum = static_cast<uint16_t>(freq * (1 << (20 - block)) / (OPL3_CLOCK / 72.0));
+        // Формула согласно документации OPL3
+        fnum = static_cast<uint16_t>((freq * (1 << (20 - block))) / OPL3_CLOCK);
         if (fnum < 1024) break;
     }
     
@@ -81,8 +79,10 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     // Устанавливаем частоту и включаем ноту
     emulator.channels[oplChannel].setFrequency(fnum, block);
     
-    // Устанавливаем громкость на основе velocity
-    uint8_t volume = static_cast<uint8_t>(63 - (velocity / 2)); // Исправлено предупреждение
+    // Устанавливаем громкость на основе velocity (0=громко, 63=тихо)
+    uint8_t volume = static_cast<uint8_t>((127 - velocity) / 2);
+    // ИСПРАВЛЯЕМ предупреждение о преобразовании:
+    if (volume > 63) volume = 63;
     emulator.channels[oplChannel].op1.outputLevel = volume;
     emulator.channels[oplChannel].op2.outputLevel = volume;
     
