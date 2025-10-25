@@ -57,16 +57,16 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     printf("Note On: MIDI ch=%d -> OPL ch=%d, note=%d, velocity=%d\n", 
            midiChannel, oplChannel, note, velocity);
     
-    // Правильный расчет частоты согласно документации OPL3
-    double freq = 8.176 * pow(2.0, (note - 12) / 12.0); // C1 = 32.7 Hz
+    // Конвертируем MIDI ноту в частоту OPL3
+    double freq = 8.176 * pow(2.0, note / 12.0); // C0 = 8.176 Hz
     
+    // Улучшенная конвертация в F-Number и Block
     uint8_t block = 0;
     uint16_t fnum = 0;
     
     // Ищем подходящий block (fnum должен быть < 1024)
     for (block = 0; block < 8; block++) {
-        double divisor = OPL3_CLOCK / 72.0;
-        fnum = static_cast<uint16_t>((freq * (1 << (20 - block))) / divisor);
+        fnum = static_cast<uint16_t>(freq * (1 << (20 - block)) / (OPL3_CLOCK / 72.0));
         if (fnum < 1024) break;
     }
     
@@ -81,24 +81,16 @@ void OPL3Driver::noteOn(int midiChannel, uint8_t note, uint8_t velocity) {
     // Устанавливаем частоту и включаем ноту
     emulator.channels[oplChannel].setFrequency(fnum, block);
     
-    // МАКСИМАЛЬНАЯ ГРОМКОСТЬ - минимальный outputLevel
-    uint8_t volume = 0; // 0 = максимальная громкость (вместо 63)
+    // Устанавливаем громкость на основе velocity
+    uint8_t volume = static_cast<uint8_t>(63 - (velocity / 2)); // Исправлено предупреждение
     emulator.channels[oplChannel].op1.outputLevel = volume;
     emulator.channels[oplChannel].op2.outputLevel = volume;
     
-    // ОЧЕНЬ МЕДЛЕННАЯ ОГИБАЮЩАЯ для максимальной длительности
-    emulator.channels[oplChannel].op1.attackRate = 4;   // Очень медленная атака
-    emulator.channels[oplChannel].op2.attackRate = 4;
-    emulator.channels[oplChannel].op1.decayRate = 1;    // Минимальная скорость спада
-    emulator.channels[oplChannel].op2.decayRate = 1;
-    emulator.channels[oplChannel].op1.sustainLevel = 15; // Максимальный сустейн
-    emulator.channels[oplChannel].op2.sustainLevel = 15;
-    emulator.channels[oplChannel].op1.releaseRate = 0;   // Самый медленный релиз
-    emulator.channels[oplChannel].op2.releaseRate = 0;
-    
-    // Максимальная обратная связь для самого богатого звука
-    emulator.channels[oplChannel].feedback = 7;
-    emulator.channels[oplChannel].op1.feedbackLevel = 1.0f; // Полная обратная связь
+    // Устанавливаем быструю атаку и медленный релиз
+    emulator.channels[oplChannel].op1.attackRate = 15;
+    emulator.channels[oplChannel].op2.attackRate = 15;
+    emulator.channels[oplChannel].op1.releaseRate = 5;
+    emulator.channels[oplChannel].op2.releaseRate = 5;
     
     emulator.channels[oplChannel].setKeyOn(true);
     
@@ -142,8 +134,8 @@ void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
     uint8_t op2_offset = getOperatorOffset(ch, 1);
 
     std::cout << "Writing OPL3 registers for channel " << oplChannel 
-              << " (base=" << (int)baseReg << ", op1=" << (int)op1_offset 
-              << ", op2=" << (int)op2_offset << ")" << std::endl;
+              << " (base=" << static_cast<int>(baseReg) << ", op1=" << static_cast<int>(op1_offset) 
+              << ", op2=" << static_cast<int>(op2_offset) << ")" << std::endl;
 
     // Записываем параметры операторов
     emulator.writeRegister(baseReg + 0x20 + op1_offset, patch.trem_vib_sus_ksr_multi[0]);
@@ -158,7 +150,7 @@ void OPL3Driver::loadPatch(uint8_t midiChannel, const OPL3Patch& patch) {
     emulator.writeRegister(baseReg + 0x80 + op2_offset, patch.sustainRelease[1]);
     emulator.writeRegister(baseReg + 0xE0 + op2_offset, patch.waveform[1]);
 
-    // Регистр Cx: Feedback/Synth Type + стерео - исправляем предупреждения
+    // Регистр Cx: Feedback/Synth Type + стерео
     uint8_t cvalue = static_cast<uint8_t>((patch.feedback << 1) | (patch.synthType & 1));
     cvalue = static_cast<uint8_t>(cvalue | 0x30); // Включаем оба канала (левый и правый)
     emulator.writeRegister(baseReg + 0xC0 + ch, cvalue);

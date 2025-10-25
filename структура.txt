@@ -3,6 +3,10 @@ OPLDream/
 │   └── settings.json
 ├── src/
 │   ├── main.cpp
+│   ├── OPL3Channel.h
+│   ├── OPL3Channel.cpp
+│   ├── OPL3Operator.h
+│   ├── OPL3Operator.cpp
 │   ├── OPL3Presets.h
 │   ├── OPL3Presets.cpp
 │   ├── OPL3Emulator.h
@@ -12,7 +16,5 @@ OPLDream/
 │   ├── MidiEvent.h
 │   ├── MidiFileParser.h
 │   └── MidiFileParser.cpp
-├── include/
-├── lib/
 ├── CMakeLists.txt
 └── build/

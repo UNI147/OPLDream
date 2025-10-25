@@ -7,6 +7,12 @@
     <ClCompile Include="C:\OPLDream\src\OPL3Emulator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\OPLDream\src\OPL3Operator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\OPLDream\src\OPL3Channel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\OPLDream\src\OPL3Driver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

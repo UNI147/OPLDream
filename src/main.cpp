@@ -85,19 +85,19 @@ int main(int argc, char* argv[]) {
         }
 
         // Загружаем тестовый инструмент
-        driver.loadGMInstrument(0, 0);
+        driver.loadGMInstrument(0, 7); // Overdriven Guitar (более слышимый)
         
         // Тестовые ноты
-        driver.noteOn(0, 36, 100); // C2
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        driver.noteOn(0, 40, 100); // E2
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        driver.noteOn(0, 43, 100); // G2
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-
-        driver.noteOff(0, 36);
-        driver.noteOff(0, 40);
-        driver.noteOff(0, 43);
+        driver.noteOn(0, 48, 100); // C3
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        driver.noteOn(0, 52, 100); // E3
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        driver.noteOn(0, 55, 100); // G3
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        
+        driver.noteOff(0, 48);
+        driver.noteOff(0, 52);
+        driver.noteOff(0, 55);
         
         std::this_thread::sleep_for(std::chrono::seconds(1));
 

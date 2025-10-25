@@ -15,11 +15,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(SOURCES
     src/main.cpp
     src/OPL3Emulator.cpp
+    src/OPL3Operator.cpp
+    src/OPL3Channel.cpp
     src/OPL3Driver.cpp
     src/MidiFileParser.cpp
     src/OPL3Presets.cpp
 )
-
 # Создание исполняемого файла
 add_executable(OPLDream ${SOURCES})
 
